@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.news import router as news_router
 
 from app.core.config import get_settings
 from app.services.smoke_test import run_smoke_test
@@ -9,6 +10,8 @@ app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
 )
+
+app.include_router(news_router)
 
 
 @app.get("/health")

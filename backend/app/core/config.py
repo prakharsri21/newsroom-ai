@@ -4,7 +4,6 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Project root: newsroom-ai/
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 ENV_FILE = PROJECT_ROOT / ".env"
 
@@ -12,6 +11,8 @@ ENV_FILE = PROJECT_ROOT / ".env"
 class Settings(BaseSettings):
     app_name: str = "Newsroom AI"
     app_env: str = "development"
+
+    database_url: str
 
     langfuse_public_key: str
     langfuse_secret_key: str
