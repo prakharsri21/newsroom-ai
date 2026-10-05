@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
+    tavily_api_key: str
+    firecrawl_api_key: str
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",
