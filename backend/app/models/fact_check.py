@@ -33,5 +33,5 @@ class FactCheck(Base):
 
     checked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
     )
