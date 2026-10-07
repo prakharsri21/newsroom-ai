@@ -1,13 +1,36 @@
-from typing import TypedDict
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 
 MAX_ITERATIONS = 3
+
+
+class ResearchEvidence(TypedDict, total=False):
+    source_id: int
+    url: str
+    title: str
+    publisher: str
+    source_type: str
+    excerpt: str
+    relevance_score: float
+    published_at: str
+
+    # Evidence quality signals
+    authority_tier: str
+    authority_score: float
+    freshness_score: float
+
 
 class NewsroomState(TypedDict, total=False):
     # Original user request
     query: str
 
-    # Research outputs
+    # Research inputs / outputs
+    research_queries: list[str]
     source_ids: list[int]
+    research_evidence: list[ResearchEvidence]
+    research_summary: str
     research_complete: bool
 
     # Editorial output
@@ -23,4 +46,5 @@ class NewsroomState(TypedDict, total=False):
 
     # Loop protection
     iteration: int
-    
+
+    messages: Annotated[list[AnyMessage], add_messages()]

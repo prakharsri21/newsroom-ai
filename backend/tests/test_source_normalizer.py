@@ -29,7 +29,7 @@ def test_normalizes_news_source():
     )
 
     assert str(source.url) == (
-        "https://www.reuters.com/world/india/example"
+    "https://reuters.com/world/india/example"
     )
     assert source.domain == "reuters.com"
     assert source.publisher == "Reuters"

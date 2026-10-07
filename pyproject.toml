@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.142.2",
     "firecrawl-py>=4.46.2",
     "httpx>=0.28.1",
+    "langchain-openai>=1.6.7",
     "langfuse>=4.16.0",
     "langgraph>=1.2.14",
     "pydantic-settings>=2.15.0",

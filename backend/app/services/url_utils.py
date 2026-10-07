@@ -26,6 +26,9 @@ def normalize_url(url: str) -> str:
     scheme = parsed.scheme.lower()
     hostname = parsed.hostname.lower()
 
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+
     # Preserve non-default ports.
     if parsed.port is not None:
         if not (

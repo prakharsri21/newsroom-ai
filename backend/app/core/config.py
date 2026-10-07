@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
 
     database_url: str
+
+    openai_api_key: str
+    openai_model: str = "gpt-5.6-luna"
 
     langfuse_public_key: str
     langfuse_secret_key: str
@@ -30,4 +33,19 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+
+    os.environ.setdefault(
+        "LANGFUSE_PUBLIC_KEY",
+        settings.langfuse_public_key,
+    )
+    os.environ.setdefault(
+        "LANGFUSE_SECRET_KEY",
+        settings.langfuse_secret_key,
+    )
+    os.environ.setdefault(
+        "LANGFUSE_BASE_URL",
+        settings.langfuse_base_url,
+    )
+
+    return settings
