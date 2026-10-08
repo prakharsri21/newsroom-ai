@@ -32,6 +32,14 @@ class NewsroomState(TypedDict, total=False):
     research_evidence: list[ResearchEvidence]
     research_summary: str
     research_complete: bool
+    research_failure_reason: str
+
+    article_headline: str
+    article_summary: str
+    article_paragraphs: list[dict[str, object]]
+    article_claims: list[dict[str, object]]
+    citation_validation_passed: bool
+    citation_validation_errors: list[str]
 
     # Editorial output
     article_draft: str

@@ -36,3 +36,39 @@ def format_research_context(
         "STRUCTURED RESEARCH EVIDENCE:\n"
         f"{evidence_text}"
     )
+
+from app.graph.state import ResearchEvidence
+
+
+def build_editor_context(
+    query: str,
+    research_summary: str,
+    evidence: list[ResearchEvidence],
+) -> str:
+    lines = [
+        f"USER QUERY: {query}",
+        "",
+        "RESEARCH SUMMARY:",
+        research_summary or "No research summary provided.",
+        "",
+        "AVAILABLE EVIDENCE:",
+    ]
+
+    for index, item in enumerate(evidence, start=1):
+        lines.extend(
+            [
+                "",
+                f"[E{index}]",
+                f"Title: {item.get('title', '')}",
+                f"Publisher: {item.get('publisher', '')}",
+                f"Published: {item.get('published_at', '')}",
+                f"URL: {item.get('url', '')}",
+                f"Authority tier: {item.get('authority_tier', '')}",
+                f"Authority score: {item.get('authority_score', '')}",
+                f"Freshness score: {item.get('freshness_score', '')}",
+                f"Relevance score: {item.get('relevance_score', '')}",
+                f"Evidence: {item.get('excerpt', '')}",
+            ]
+        )
+
+    return "\n".join(lines)

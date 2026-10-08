@@ -4,10 +4,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.evidence import collect_research_updates, message_text
 from app.graph.llm import researcher_llm
-from app.graph.state import MAX_ITERATIONS, NewsroomState
-
-
 from app.graph.research_context import format_research_context
+from app.graph.state import MAX_ITERATIONS, NewsroomState
 
 
 def build_researcher_system_prompt() -> str:
@@ -39,13 +37,10 @@ Rules:
 10. If evidence is conflicting or incomplete, perform another search.
 11. Treat authority_score, freshness_score, and relevance_score
     as evidence-quality signals, not as proof that a claim is true.
-
 12. Prefer evidence with high authority and high freshness for
     current news.
-
 13. A large number of low-quality sources does not compensate for
     missing authoritative evidence.
-
 14. When a primary source is available, prefer it over secondary
     reporting for the core factual claim.
 """
@@ -63,8 +58,12 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
 
     if not messages:
         messages = [
-            SystemMessage(content=build_researcher_system_prompt()),
-            HumanMessage(content=query),
+            SystemMessage(
+                content=build_researcher_system_prompt(),
+            ),
+            HumanMessage(
+                content=query,
+            ),
         ]
 
     messages = [
@@ -74,7 +73,7 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
                 "Here is the current structured research state. "
                 "Use it when deciding whether more research is needed.\n\n"
                 f"{research_context}"
-            )
+            ),
         ),
     ]
 
@@ -105,6 +104,9 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
 
     elif not wants_tool:
         result["research_complete"] = False
+        result["research_failure_reason"] = (
+            "No usable evidence was found for the requested query."
+        )
         result["research_summary"] = (
             "Research stopped without collecting evidence. "
             "The research is incomplete."
@@ -112,11 +114,13 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
 
     elif iteration >= MAX_ITERATIONS:
         result["research_complete"] = False
+        result["research_failure_reason"] = (
+            "Research reached the maximum iteration limit "
+            "without sufficient evidence."
+        )
         result["research_summary"] = (
             "Research stopped after reaching the maximum number "
             "of Researcher iterations. Evidence may be incomplete."
         )
-
-    
 
     return result
