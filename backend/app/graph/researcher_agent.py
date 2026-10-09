@@ -47,7 +47,7 @@ Rules:
 
 
 async def researcher_agent_node(state: NewsroomState) -> dict:
-    query = state["query"]
+    query = state.get("active_research_query") or state["query"]
 
     messages = state.get("messages", [])
 

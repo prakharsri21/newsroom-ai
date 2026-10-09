@@ -4,6 +4,7 @@ from app.core.config import get_settings
 from app.graph.tools.research_tools import search_news
 from app.schemas.research import ResearchDecision
 from app.schemas.editor import ArticleDraft
+from app.schemas.fact_check import FactCheckReport
 
 settings = get_settings()
 
@@ -36,3 +37,11 @@ editor_llm = ChatOpenAI(
     output_version="responses/v1",
     reasoning={"effort": "low"},
 ).with_structured_output(ArticleDraft)
+
+fact_checker_llm = ChatOpenAI(
+    model=settings.openai_model,
+    api_key=settings.openai_api_key,
+    use_responses_api=True,
+    output_version="responses/v1",
+    reasoning={"effort": "low"},
+).with_structured_output(FactCheckReport)

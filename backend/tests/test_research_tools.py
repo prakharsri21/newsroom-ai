@@ -2,7 +2,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
+from datetime import UTC, datetime
 from app.graph.tools.research_tools import search_news
 from app.schemas.search import SearchResult, WebSearchResponse
 
@@ -17,7 +17,7 @@ async def test_search_news_tool():
                 url="https://example.com/article",
                 content="Test article content",
                 score=0.95,
-                published_at="2026-10-08",
+                published_at=datetime.now(UTC).date().isoformat(),
             )
         ],
     )

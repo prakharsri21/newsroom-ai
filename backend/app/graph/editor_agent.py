@@ -58,6 +58,38 @@ async def editor_agent_node(state: NewsroomState) -> dict:
         evidence,
     )
 
+    failed_reviews = [
+        review
+        for review in state.get("claim_verifications", [])
+        if review.get("verdict") != "SUPPORTED"
+    ]
+
+    if failed_reviews:
+        feedback_lines = [
+        "",
+        "FACT-CHECK FEEDBACK FROM THE PREVIOUS DRAFT:",
+        "Correct, qualify, or remove each claim below. "
+        "Do not repeat an unsupported claim as established fact.",
+        ]
+
+        for review in failed_reviews:
+            feedback_lines.extend([
+                "",
+                f"Claim: {review.get('claim_text', '')}",
+                f"Verdict: {review.get('verdict', '')}",
+                f"Reason: {review.get('rationale', '')}",
+                (
+                    "Supporting evidence: "
+                    f"{', '.join(review.get('supporting_evidence_refs', []))}"
+                ),
+                (
+                    "Contradicting evidence: "
+                    f"{', '.join(review.get('contradicting_evidence_refs', []))}"
+                ),
+            ])
+
+        context += "\n".join(feedback_lines)
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=context),

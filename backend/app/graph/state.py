@@ -33,6 +33,7 @@ class NewsroomState(TypedDict, total=False):
     research_summary: str
     research_complete: bool
     research_failure_reason: str
+    active_research_query: str
 
     article_headline: str
     article_summary: str
@@ -48,6 +49,10 @@ class NewsroomState(TypedDict, total=False):
     # Fact-check output
     fact_check_passed: bool
     fact_check_reason: str
+    fact_check_report: dict[str, object]
+    claim_verifications: list[dict[str, object]]
+    fact_check_attempts: int
+    research_follow_up_query: str
 
     # Router decision
     next_action: str
