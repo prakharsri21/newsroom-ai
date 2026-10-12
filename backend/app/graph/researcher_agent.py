@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -9,7 +10,9 @@ from app.graph.state import MAX_ITERATIONS, NewsroomState
 
 
 def build_researcher_system_prompt() -> str:
-    current_date = datetime.now(UTC).date().isoformat()
+    current_date = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    ).date().strftime("%d %B %Y")
 
     return f"""
 You are the Researcher agent for a news research system.
@@ -43,6 +46,10 @@ Rules:
     missing authoritative evidence.
 14. When a primary source is available, prefer it over secondary
     reporting for the core factual claim.
+15. For current-news requests, look for follow-up developments
+    published on or before the current date. Compare publication dates
+    rather than assuming a newly discovered article describes a new event.
+    Explicitly distinguish new developments from older background reporting.
 """
 
 

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-
+from sqlalchemy import Boolean,func
 
 from app.db.base import Base
 
@@ -40,4 +40,20 @@ class NewsStory(Base):
     importance_score: Mapped[float] = mapped_column(
         Float,
         default=0.0,
+    )
+
+    # Distinguish discovered feed items from generated articles.
+    is_discovery: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
+
+    # Timestamp used to decide whether cached discovery results are fresh.
+    last_refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
     )

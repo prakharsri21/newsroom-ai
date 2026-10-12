@@ -17,6 +17,7 @@ async def search_web(
     query: str,
     *,
     max_results: int = 3,
+    days: int | None = None,
 ) -> WebSearchResponse:
     client = AsyncTavilyClient(
         api_key=settings.tavily_api_key
@@ -27,6 +28,7 @@ async def search_web(
         topic="news",
         search_depth="basic",
         max_results=max_results,
+        days=days,
         include_answer=False,
     )
 
@@ -48,6 +50,7 @@ async def search_web(
             "provider": "tavily",
             "result_count": str(len(results)),
             "search_depth": "basic",
+            **({"days": str(days)} if days is not None else {}),
         }
     )
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column

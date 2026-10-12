@@ -1,9 +1,13 @@
 import json
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from datetime import UTC, datetime
-from app.graph.tools.research_tools import search_news
+
+from app.graph.tools.research_tools import (
+    build_date_aware_query,
+    search_news,
+)
 from app.schemas.search import SearchResult, WebSearchResponse
 
 
@@ -34,10 +38,13 @@ async def test_search_news_tool():
             }
         )
 
-    mock_search.assert_awaited_once_with(
-        "test query",
-        max_results=3,
-    )
+    mock_search.assert_awaited_once()
+
+    called_query = mock_search.await_args.args[0]
+
+    assert called_query.startswith("test query")
+    assert "as of " in called_query
+    assert mock_search.await_args.kwargs["max_results"] == 3
 
     payload = json.loads(result)
 
@@ -71,7 +78,41 @@ async def test_search_news_tool_caps_results_at_three():
             }
         )
 
-    mock_search.assert_awaited_once_with(
-        "test query",
-        max_results=3,
+    mock_search.assert_awaited_once()
+
+    called_query = mock_search.await_args.args[0]
+
+    assert called_query.startswith("test query")
+    assert "as of " in called_query
+    assert mock_search.await_args.kwargs["max_results"] == 3
+
+
+def test_current_news_query_includes_today():
+    result = build_date_aware_query(
+        "CJP news today",
+        today=date(2026, 10, 13),
     )
+
+    assert result == (
+        "CJP news today follow-up updates as of 13 October 2026"
+    )
+
+
+def test_historical_query_is_not_modified():
+    result = build_date_aware_query(
+        "History of CJP",
+        today=date(2026, 10, 13),
+    )
+
+    assert result == "History of CJP"
+
+
+def test_current_date_is_not_appended_twice():
+    query = "CJP latest news on 13 October 2026"
+
+    result = build_date_aware_query(
+        query,
+        today=date(2026, 10, 13),
+    )
+
+    assert result == query
