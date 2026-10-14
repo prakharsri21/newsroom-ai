@@ -7,7 +7,6 @@ from langfuse import observe
 from app.services.firecrawl_fetch import fetch_with_firecrawl
 from app.services.observability import record_current_span
 
-
 MIN_CONTENT_LENGTH = 200
 
 
