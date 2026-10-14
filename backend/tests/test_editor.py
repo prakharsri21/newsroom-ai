@@ -66,7 +66,7 @@ async def test_newsroom_graph_researches_then_edits():
         ),
         patch(
             "app.graph.editor_agent.record_current_span",
-        ) as mock_record_current_span,
+        ),
     ):
         with patch(
             "app.graph.research_graph.research_graph.ainvoke",
