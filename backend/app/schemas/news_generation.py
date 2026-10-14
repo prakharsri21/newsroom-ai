@@ -10,6 +10,7 @@ GenerationStatus = Literal[
     "needs_review",
     "research_incomplete",
     "citation_validation_failed",
+    "out_of_scope",
 ]
 
 
