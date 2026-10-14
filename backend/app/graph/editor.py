@@ -7,6 +7,7 @@ from app.graph.state import NewsroomState
 @observe(
     name="editor-node",
     as_type="span",
+    capture_input=False,
     capture_output=False,
 )
 async def editor_node(state: NewsroomState) -> dict:
