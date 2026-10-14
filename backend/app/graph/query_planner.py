@@ -4,10 +4,9 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import HumanMessage, SystemMessage
 from langfuse import observe
 
-from app.services.observability import record_current_span
-
 from app.graph.llm import query_planner_llm
 from app.schemas.query_plan import NewsQueryPlan
+from app.services.observability import record_current_span
 from app.services.query_normalization import (
     is_historical_query,
     normalize_search_query,
@@ -73,7 +72,12 @@ def _fallback_plan(query: str, current_date: date) -> NewsQueryPlan:
     )
 
 
-@observe(name="query-planner", as_type="span", capture_input=False, capture_output=False)
+@observe(
+    name="query-planner",
+    as_type="span",
+    capture_input=False,
+    capture_output=False,
+)
 async def build_news_query_plan(
     query: str,
     *,
@@ -89,7 +93,11 @@ async def build_news_query_plan(
             metadata={
                 "plan_intent": plan.intent,
                 "plan_follow_up_count": str(len(plan.follow_up_queries)),
-                "plan_search_days": str(plan.search_days) if plan.search_days is not None else "none",
+                "plan_search_days": (
+                    str(plan.search_days)
+                    if plan.search_days is not None
+                    else "none"
+                ),
                 "plan_fallback_used": "true",
             }
         )
