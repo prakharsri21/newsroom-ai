@@ -137,3 +137,27 @@ async def test_historical_plan_flag_skips_date_filter_even_for_rewritten_query()
         max_results=3,
         days=None,
     )
+
+
+@pytest.mark.anyio
+async def test_search_news_records_fallback_and_result_metrics():
+    empty = _response(query="CJP news")
+    found = _response(results=[_article()], query="CJP news")
+
+    with (
+        patch(
+            "app.graph.tools.research_tools.search_web",
+            new_callable=AsyncMock,
+            side_effect=[empty, found],
+        ),
+        patch("app.graph.tools.research_tools.record_current_span") as record_span,
+    ):
+        await search_news.ainvoke(
+            {"query": "CJP news update today", "max_results": 3}
+        )
+
+    metrics = record_span.call_args.kwargs["metadata"]
+    assert metrics["fallback_used"] == "true"
+    assert metrics["fallback_days"] == "14"
+    assert metrics["search_attempt_count"] == "2"
+    assert metrics["result_count"] == "1"
