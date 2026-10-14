@@ -96,7 +96,7 @@ def _planned_search_message(
             args["days"] = search_days
 
     return AIMessage(
-        content="Executing the next planned search before completing current-news research.",
+        content="Executing the required search before completing the research task.",
         tool_calls=[
             {
                 "name": "search_news",
@@ -158,10 +158,20 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
     response = await researcher_llm.ainvoke(messages)
     iteration = state.get("iteration", 0) + 1
 
-    # Only force the preplanned primary/follow-up searches for the initial
-    # request. Fact-check-directed follow-up research has its own objective.
+    # Fact-check-directed follow-up research must search for its specific
+    # unresolved claim, rather than falling back to the broad original topic.
+    # Let the model choose alternative queries on later iterations.
     next_planned_query = None
-    if not is_follow_up_task:
+    researched_query_keys = {
+        normalize_search_query(item).casefold()
+        for item in state.get("research_queries", [])
+        if normalize_search_query(item)
+    }
+    if is_follow_up_task and iteration == 1:
+        follow_up_key = normalize_search_query(query).casefold()
+        if follow_up_key and follow_up_key not in researched_query_keys:
+            next_planned_query = query
+    elif not is_follow_up_task:
         next_planned_query = _next_unsearched_planned_query(
             query_plan,
             state.get("research_queries", []),
@@ -179,12 +189,14 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
     )
 
     planned_search_forced = False
+    follow_up_search_forced = False
     if (
         next_planned_query
         and iteration < MAX_ITERATIONS
         and planned_key not in model_query_keys
     ):
         planned_search_forced = True
+        follow_up_search_forced = is_follow_up_task
         response = _planned_search_message(
             next_planned_query,
             iteration=iteration,
@@ -254,6 +266,7 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
             "query_plan_intent": str(query_plan.get("intent", "unknown")),
             "follow_up_task": str(is_follow_up_task).lower(),
             "planned_search_forced": str(planned_search_forced).lower(),
+            "follow_up_search_forced": str(follow_up_search_forced).lower(),
             "tool_call_count": str(len(getattr(response, "tool_calls", []) or [])),
             "research_query_count": str(len(research_queries)),
             "evidence_count": str(len(research_evidence)),

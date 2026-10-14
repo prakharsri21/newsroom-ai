@@ -20,7 +20,7 @@ On failure, the root span records `pipeline_status=error`, `failure_stage`, `err
 ## Observation-level metadata
 
 - **query-planner**: current/historical intent, follow-up count, date-window choice, whether the deterministic fallback ran, and primary-query length.
-- **researcher-node**: iteration, intent, whether it is a fact-check follow-up, forced planned-search behavior, requested tool-call count, collected query/evidence counts, and completion state.
+- **researcher-node**: iteration, intent, whether it is a fact-check follow-up, forced planned-search behavior, whether the first claim-directed follow-up search was forced, requested tool-call count, collected query/evidence counts, and completion state.
 - **search-news-tool**: effective date window, historical mode, number of search attempts, whether the empty-result fallback ran, fallback window, and result count.
 - **web-search**: provider, Tavily result count, requested result limit, query length, search depth, and date window. Observation duration identifies slow provider calls.
 - **fetch-source / fetch-source-http**: direct HTTP extraction status, method, and text length; when Firecrawl fallback is needed, `fallback_status` moves from `started` to `success` or `error`, with the triggering error type and fallback extraction method/text length or fallback error type. The HTTP child may be marked errored even when the parent succeeds through Firecrawl; inspect the parent outcome to distinguish recovered failures from total fetch failures.
