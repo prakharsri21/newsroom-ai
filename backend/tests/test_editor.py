@@ -65,13 +65,9 @@ async def test_newsroom_graph_researches_then_edits():
             fake_editor,
         ),
         patch(
-            "app.graph.editor_agent.get_client",
-        ) as mock_get_client,
+            "app.graph.editor_agent.record_current_span",
+        ) as mock_record_current_span,
     ):
-        mock_get_client.return_value.update_current_span = (
-            lambda **kwargs: None
-        )
-
         with patch(
             "app.graph.research_graph.research_graph.ainvoke",
             new=AsyncMock(return_value=research_state),
