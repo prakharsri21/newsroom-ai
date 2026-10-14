@@ -1,102 +1,69 @@
 import json
-import re
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+
 from langchain_core.tools import tool
 
-from app.services.web_search import search_web
 from app.graph.evidence_quality import (
     calculate_freshness_score,
     classify_authority,
 )
-
-_CURRENT_NEWS_CUES = re.compile(
-    r"\b(today|yesterday|latest|current|recent|breaking|news|"
-    r"updates?|developments?|this week|follow[- ]?up)\b",
-    re.IGNORECASE,
+from app.services.query_normalization import (
+    default_search_days,
+    normalize_search_query,
 )
-
-_HISTORICAL_QUERY_CUES = re.compile(
-    r"\b(history of|historical|timeline of|origins of|background of)\b",
-    re.IGNORECASE,
-)
+from app.services.web_search import search_web
 
 
-def build_date_aware_query(
-    query: str,
-    today: date | None = None,
-) -> str:
-    """Add today's date to current-news searches without altering the UI query."""
-    cleaned_query = " ".join(query.split())
-
-    if not cleaned_query:
-        return cleaned_query
-
-    has_current_intent = bool(_CURRENT_NEWS_CUES.search(cleaned_query))
-    is_historical = bool(_HISTORICAL_QUERY_CUES.search(cleaned_query))
-
-    if is_historical and not has_current_intent:
-        return cleaned_query
-
-    current_date = today or datetime.now(
-        ZoneInfo("Asia/Kolkata")
-    ).date()
-
-    date_label = current_date.strftime("%d %B %Y")
-
-    date_variants = (
-        date_label,
-        f"{current_date.day} {current_date.strftime('%B %Y')}",
-        current_date.isoformat(),
-        current_date.strftime("%d %b %Y"),
-        current_date.strftime("%B %d, %Y"),
-    )
-
-    query_lower = cleaned_query.casefold()
-
-    if any(
-        variant.casefold() in query_lower
-        for variant in date_variants
-    ):
-        return cleaned_query
-
-    if has_current_intent:
-        return f"{cleaned_query} follow-up updates as of {date_label}"
-
-    return (
-        f"{cleaned_query} latest news and follow-up updates "
-        f"as of {date_label}"
-    )
 @tool
-async def search_news(query: str, max_results: int = 3) -> str:
+async def search_news(
+    query: str,
+    max_results: int = 3,
+    days: int | None = None,
+    historical: bool = False,
+) -> str:
     """
-    Search the web for recent news related to the given query.
+    Search for news using a concise topic-focused query.
 
-    Use this tool when you need additional factual information
-    or evidence for a news story.
+    Current-news searches use a seven-day publication window by default.
+    Set days explicitly when the Query Planner provides a window; historical
+    requests omit date filtering.
     """
     safe_max_results = min(max(max_results, 1), 3)
-
     requested_query = " ".join(query.split())
-    dated_query = build_date_aware_query(requested_query)
+    normalized_query = normalize_search_query(requested_query) or requested_query
+
+    if historical:
+        effective_days = None
+    elif days is not None:
+        effective_days = max(1, min(days, 30))
+    else:
+        effective_days = default_search_days(requested_query)
 
     response = await search_web(
-        dated_query,
+        normalized_query,
         max_results=safe_max_results,
+        days=effective_days,
     )
+    fallback_used = False
+    fallback_days: int | None = None
+
+    # Widen the date window only when the narrower current-news search is empty.
+    # This catches late-indexed reports without adding a second call on success.
+    if not response.results and effective_days is not None:
+        candidate_days = min(max(effective_days * 2, 14), 30)
+        if candidate_days > effective_days:
+            fallback_used = True
+            fallback_days = candidate_days
+            response = await search_web(
+                normalized_query,
+                max_results=safe_max_results,
+                days=fallback_days,
+            )
 
     results = []
-
     for result in response.results:
         url = str(result.url)
-
-        authority_tier, authority_score = classify_authority(
-            url
-        )
-
-        freshness_score = calculate_freshness_score(
-            result.published_at
-        )
+        authority_tier, authority_score = classify_authority(url)
+        freshness_score = calculate_freshness_score(result.published_at)
 
         results.append(
             {
@@ -115,5 +82,13 @@ async def search_news(query: str, max_results: int = 3) -> str:
         {
             "query": response.query,
             "results": results,
+            "search_metadata": {
+                "requested_query": requested_query,
+                "normalized_query": normalized_query,
+                "search_days": effective_days,
+                "fallback_used": fallback_used,
+                "fallback_days": fallback_days,
+                "historical": historical or effective_days is None,
+            },
         }
     )

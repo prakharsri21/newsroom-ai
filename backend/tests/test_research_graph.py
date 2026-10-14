@@ -56,7 +56,7 @@ def test_routes_to_complete_at_max_iterations():
                 ],
             )
         ],
-        "iteration": 3,
+        "iteration": 4,
     }
 
     assert route_after_researcher(state) == "complete"

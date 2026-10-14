@@ -17,6 +17,7 @@ from app.schemas.news_generation import (
     NewsSourceResponse,
 )
 from app.services.research_persistence import persist_research_evidence
+from app.graph.query_planner import build_news_query_plan
 
 
 def _as_string(value: Any) -> str | None:
@@ -184,9 +185,11 @@ async def generate_news(
     category: str = "General",
 ) -> NewsGenerationResponse:
     """Run the newsroom graph, persist its output, and build an API response."""
+    query_plan = await build_news_query_plan(query)
     result = await run_newsroom_graph(
         {
             "query": query,
+            "query_plan": query_plan.model_dump(mode="json"),
             "iteration": 0,
             "article_version": 0,
         }

@@ -9,7 +9,33 @@ from app.models.claim_source import ClaimSource
 from app.models.fact_check import FactCheck
 from app.models.news import NewsStory
 from app.models.story_source import StorySource
+from app.schemas.query_plan import NewsQueryPlan
 from app.services.generation import generate_news
+
+
+def _fake_query_plan():
+    return NewsQueryPlan(
+        normalized_topic="Latest RBI monetary policy",
+        intent="current",
+        primary_query="RBI monetary policy",
+        follow_up_queries=[
+            "RBI monetary policy recent developments",
+            "RBI official response",
+        ],
+        search_days=7,
+        disambiguation_notes="",
+        rationale="Test plan.",
+    )
+
+
+@pytest.fixture(autouse=True)
+def mock_query_planner():
+    with patch(
+        "app.services.generation.build_news_query_plan",
+        new_callable=AsyncMock,
+        return_value=_fake_query_plan(),
+    ):
+        yield
 
 
 CLAIM_TEXT = "The RBI announced its latest monetary policy decision."
