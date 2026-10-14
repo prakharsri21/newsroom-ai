@@ -249,3 +249,47 @@ async def test_researcher_forces_historical_primary_without_date_filter():
     tool_call = result["messages"][0].tool_calls[0]
     assert tool_call["args"]["query"] == "CJP protests timeline"
     assert tool_call["args"]["historical"] is True
+
+
+
+@pytest.mark.anyio
+async def test_researcher_does_not_force_second_follow_up_when_evidence_is_sufficient():
+    response = SimpleNamespace(tool_calls=[], content="The evidence is sufficient.")
+    mock_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=response))
+
+    with patch("app.graph.researcher_agent.researcher_llm", mock_llm):
+        result = await researcher_agent_node(
+            {
+                "query": "CJP news today",
+                "query_plan": {
+                    "intent": "current",
+                    "primary_query": "CJP news",
+                    "follow_up_queries": [
+                        "CJP recent developments",
+                        "CJP official response",
+                    ],
+                    "search_days": 7,
+                },
+                "messages": [],
+                "iteration": 2,
+                "research_queries": [
+                    "CJP news",
+                    "CJP recent developments",
+                ],
+                "research_evidence": [
+                    {
+                        "url": "https://example.com/cjp",
+                        "title": "CJP follow-up report",
+                        "excerpt": "The report covers the latest confirmed development.",
+                        "relevance_score": 0.95,
+                        "published_at": "2026-10-14T00:00:00Z",
+                        "authority_tier": "reputable_secondary",
+                        "authority_score": 0.8,
+                        "freshness_score": 1.0,
+                    }
+                ],
+            }
+        )
+
+    assert result["research_complete"] is True
+    assert not getattr(result["messages"][0], "tool_calls", [])
