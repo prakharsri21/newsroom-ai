@@ -28,9 +28,11 @@ async def fact_checker_node(state: NewsroomState) -> dict:
             "claim_count": str(len(reviews)),
             "supported_claim_count": str(verdicts.count("SUPPORTED")),
             "non_supported_claim_count": str(
-               (sum(verdict != "SUPPORTED" for verdict in verdicts))
+                sum(verdict != "SUPPORTED" for verdict in verdicts)
             ),
-            "fact_check_passed": str(bool(result.get("fact_check_passed"))).lower(),
+            "fact_check_passed": str(
+                bool(result.get("fact_check_passed"))
+            ).lower(),
             "next_action": str(result.get("next_action", "none")),
             "follow_up_research_requested": str(
                 bool(result.get("research_follow_up_query"))
