@@ -1,11 +1,13 @@
 import json
 
 from langchain_core.tools import tool
+from langfuse import observe
 
 from app.graph.evidence_quality import (
     calculate_freshness_score,
     classify_authority,
 )
+from app.services.observability import record_current_span
 from app.services.query_normalization import (
     default_search_days,
     normalize_search_query,
@@ -14,6 +16,12 @@ from app.services.web_search import search_web
 
 
 @tool
+@observe(
+    name="search-news-tool",
+    as_type="tool",
+    capture_input=False,
+    capture_output=False,
+)
 async def search_news(
     query: str,
     max_results: int = 3,
@@ -78,6 +86,17 @@ async def search_news(
             }
         )
 
+    record_current_span(
+        metadata={
+            "query_length": str(len(normalized_query)),
+            "search_days": str(effective_days) if effective_days is not None else "none",
+            "historical": str(historical or effective_days is None).lower(),
+            "fallback_used": str(fallback_used).lower(),
+            "fallback_days": str(fallback_days) if fallback_days is not None else "none",
+            "search_attempt_count": "2" if fallback_used else "1",
+            "result_count": str(len(results)),
+        }
+    )
     return json.dumps(
         {
             "query": response.query,

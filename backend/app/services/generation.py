@@ -1,6 +1,8 @@
 
+from time import perf_counter
 from typing import Any
 
+from langfuse import observe
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.graph.citation import build_evidence_registry
@@ -11,13 +13,14 @@ from app.models.claim_source import ClaimSource
 from app.models.fact_check import FactCheck
 from app.models.news import NewsStory
 from app.models.story_source import StorySource
+from app.graph.query_planner import build_news_query_plan
 from app.schemas.fact_check import ClaimVerification
 from app.schemas.news_generation import (
     NewsGenerationResponse,
     NewsSourceResponse,
 )
+from app.services.observability import record_current_span
 from app.services.research_persistence import persist_research_evidence
-from app.graph.query_planner import build_news_query_plan
 
 
 def _as_string(value: Any) -> str | None:
@@ -178,92 +181,180 @@ async def _persist_article_results(
     return story.id, article.id
 
 
+def _metric_bool(value: Any) -> str:
+    """Format nullable booleans for low-cardinality Langfuse metadata."""
+    if value is None:
+        return "unknown"
+    return str(bool(value)).lower()
+
+
+def _elapsed_ms(started_at: float) -> str:
+    return f"{(perf_counter() - started_at) * 1000:.1f}"
+
+
+@observe(
+    name="generate-news",
+    as_type="span",
+    capture_input=False,
+    capture_output=False,
+)
 async def generate_news(
     db: AsyncSession,
     *,
     query: str,
     category: str = "General",
 ) -> NewsGenerationResponse:
-    """Run the newsroom graph, persist its output, and build an API response."""
-    query_plan = await build_news_query_plan(query)
-    result = await run_newsroom_graph(
-        {
-            "query": query,
-            "query_plan": query_plan.model_dump(mode="json"),
-            "iteration": 0,
-            "article_version": 0,
-        }
-    )
+    """Run the complete news pipeline and record stage-level timing metadata."""
+    total_started_at = perf_counter()
+    stage = "query_planning"
+    timings: dict[str, str] = {}
+    query_plan = None
+    result: dict[str, Any] = {}
+    evidence: list[dict[str, Any]] = []
 
-    raw_evidence = result.get("research_evidence", [])
-    evidence = raw_evidence
+    try:
+        stage_started_at = perf_counter()
+        query_plan = await build_news_query_plan(query)
+        timings["query_plan_ms"] = _elapsed_ms(stage_started_at)
+        query_plan_fallback = (
+            "deterministic fallback" in query_plan.rationale.lower()
+        )
 
-    # Persist collected evidence even if research was incomplete,
-    # so any sources returned to the client have stable database IDs.
-    if raw_evidence:
-        _, evidence = await persist_research_evidence(
+        stage = "research_graph"
+        stage_started_at = perf_counter()
+        result = await run_newsroom_graph(
+            {
+                "query": query,
+                "query_plan": query_plan.model_dump(mode="json"),
+                "iteration": 0,
+                "article_version": 0,
+            }
+        )
+        timings["graph_ms"] = _elapsed_ms(stage_started_at)
+
+        stage = "persist_evidence"
+        raw_evidence = result.get("research_evidence", [])
+        evidence = raw_evidence
+        stage_started_at = perf_counter()
+        # Persist collected evidence even if research was incomplete, so any
+        # sources returned to the client have stable database IDs.
+        if raw_evidence:
+            _, evidence = await persist_research_evidence(db, raw_evidence)
+            result["research_evidence"] = evidence
+        timings["evidence_persistence_ms"] = _elapsed_ms(stage_started_at)
+
+        stage = "persist_article"
+        stage_started_at = perf_counter()
+        story_id, article_id = await _persist_article_results(
             db,
-            raw_evidence,
+            result=result,
+            category=category,
+            evidence=evidence,
         )
-        result["research_evidence"] = evidence
+        timings["article_persistence_ms"] = _elapsed_ms(stage_started_at)
 
-    story_id, article_id = await _persist_article_results(
-        db,
-        result=result,
-        category=category,
-        evidence=evidence,
-    )
+        stage = "build_response"
+        stage_started_at = perf_counter()
+        sources = [
+            NewsSourceResponse(
+                evidence_ref=f"E{index}",
+                source_id=item.get("source_id"),
+                title=item.get("title") or "Untitled source",
+                publisher=item.get("publisher"),
+                url=str(item["url"]),
+                published_at=_as_string(item.get("published_at")),
+                authority_tier=item.get("authority_tier"),
+            )
+            for index, item in enumerate(evidence, start=1)
+        ]
 
-    sources = [
-        NewsSourceResponse(
-            evidence_ref=f"E{index}",
-            source_id=item.get("source_id"),
-            title=item.get("title") or "Untitled source",
-            publisher=item.get("publisher"),
-            url=str(item["url"]),
-            published_at=_as_string(item.get("published_at")),
-            authority_tier=item.get("authority_tier"),
+        claims = [
+            ClaimVerification.model_validate(review)
+            for review in result.get("claim_verifications", [])
+        ]
+
+        status = _generation_status(result)
+        messages = {
+            "verified": "Research, citation validation, and claim verification passed.",
+            "needs_review": (
+                "The article requires review because not all verification checks passed."
+            ),
+            "research_incomplete": (
+                "Research was incomplete. No article is presented as verified."
+            ),
+            "citation_validation_failed": (
+                "Article citations failed validation. The article requires review."
+            ),
+        }
+        response = NewsGenerationResponse(
+            status=status,
+            query=query,
+            story_id=story_id,
+            article_id=article_id,
+            headline=result.get("article_headline"),
+            summary=result.get("article_summary"),
+            article=result.get("article_draft"),
+            research_complete=result.get("research_complete", False),
+            citation_validation_passed=result.get("citation_validation_passed"),
+            fact_check_passed=result.get("fact_check_passed"),
+            fact_check_reason=result.get("fact_check_reason"),
+            sources=sources,
+            claims=claims,
+            message=messages[status],
+            research_failure_reason=result.get("research_failure_reason"),
+            citation_validation_errors=result.get("citation_validation_errors", []),
         )
-        for index, item in enumerate(evidence, start=1)
-    ]
+        timings["response_build_ms"] = _elapsed_ms(stage_started_at)
 
-    claims = [
-        ClaimVerification.model_validate(review)
-        for review in result.get("claim_verifications", [])
-    ]
-
-    status = _generation_status(result)
-
-    messages = {
-        "verified": "Research, citation validation, and claim verification passed.",
-        "needs_review": (
-            "The article requires review because not all verification checks passed."
-        ),
-        "research_incomplete": (
-            "Research was incomplete. No article is presented as verified."
-        ),
-        "citation_validation_failed": (
-            "Article citations failed validation. The article requires review."
-        ),
-    }
-
-    return NewsGenerationResponse(
-        status=status,
-        query=query,
-        story_id=story_id,
-        article_id=article_id,
-        headline=result.get("article_headline"),
-        summary=result.get("article_summary"),
-        article=result.get("article_draft"),
-        research_complete=result.get("research_complete", False),
-        citation_validation_passed=result.get(
-            "citation_validation_passed"
-        ),
-        fact_check_passed=result.get("fact_check_passed"),
-        fact_check_reason=result.get("fact_check_reason"),
-        sources=sources,
-        claims=claims,
-        message=messages[status],
-        research_failure_reason=result.get("research_failure_reason"),
-        citation_validation_errors=result.get("citation_validation_errors", []),
-    )
+        record_current_span(
+            metadata={
+                "pipeline": "news_generation",
+                "category": category,
+                "query_length": str(len(query)),
+                "query_plan_intent": query_plan.intent,
+                "query_plan_fallback": str(query_plan_fallback).lower(),
+                "planned_follow_up_count": str(len(query_plan.follow_up_queries)),
+                "planned_search_days": (
+                    str(query_plan.search_days)
+                    if query_plan.search_days is not None
+                    else "none"
+                ),
+                "research_complete": _metric_bool(
+                    result.get("research_complete")
+                ),
+                "last_research_loop_iteration": str(result.get("iteration", 0)),
+                "research_query_count": str(len(result.get("research_queries", []))),
+                "evidence_count": str(len(evidence)),
+                "claim_count": str(len(claims)),
+                "source_count": str(len(sources)),
+                "status": status,
+                "citation_validation_passed": _metric_bool(
+                    result.get("citation_validation_passed")
+                ),
+                "fact_check_passed": _metric_bool(
+                    result.get("fact_check_passed")
+                ),
+                **timings,
+                "total_pipeline_ms": _elapsed_ms(total_started_at),
+            }
+        )
+        return response
+    except Exception as exc:
+        failure_metadata = {
+            "pipeline": "news_generation",
+            "category": category,
+            "query_length": str(len(query)),
+            "pipeline_status": "error",
+            "failure_stage": stage,
+            "error_type": type(exc).__name__,
+            **timings,
+            "total_pipeline_ms": _elapsed_ms(total_started_at),
+        }
+        if query_plan is not None:
+            failure_metadata["query_plan_intent"] = query_plan.intent
+        record_current_span(
+            metadata=failure_metadata,
+            level="ERROR",
+            status_message=f"News generation failed during {stage}",
+        )
+        raise

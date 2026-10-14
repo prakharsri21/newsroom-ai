@@ -1,8 +1,9 @@
-from langfuse import get_client, observe
+from langfuse import observe
 from tavily import AsyncTavilyClient
 
 from app.core.config import get_settings
 from app.schemas.search import SearchResult, WebSearchResponse
+from app.services.observability import record_current_span
 
 
 settings = get_settings()
@@ -43,14 +44,14 @@ async def search_web(
         for result in response.get("results", [])
     ]
 
-    langfuse = get_client()
-
-    langfuse.update_current_span(
+    record_current_span(
         metadata={
             "provider": "tavily",
             "result_count": str(len(results)),
+            "max_results": str(max_results),
             "search_depth": "basic",
-            **({"days": str(days)} if days is not None else {}),
+            "query_length": str(len(query)),
+            "days": str(days) if days is not None else "none",
         }
     )
 

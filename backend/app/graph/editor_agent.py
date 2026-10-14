@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langfuse import get_client
 
 from app.graph.citation import (
     build_evidence_registry,
@@ -10,6 +9,7 @@ from app.graph.citation import (
 from app.graph.llm import editor_llm
 from app.graph.research_context import build_editor_context
 from app.graph.state import NewsroomState
+from app.services.observability import record_current_span
 
 
 EDITOR_SYSTEM_PROMPT = """
@@ -163,14 +163,6 @@ async def editor_agent_node(state: NewsroomState) -> dict:
 
     draft = await editor_llm.ainvoke(messages)
 
-    langfuse = get_client()
-    langfuse.update_current_span(
-        metadata={
-            "evidence_count": str(len(evidence)),
-            "claim_count": str(len(draft.claims)),
-        }
-    )
-
     evidence_registry = build_evidence_registry(evidence)
     citation_errors = validate_article_citations(draft, evidence_registry)
 
@@ -196,6 +188,17 @@ async def editor_agent_node(state: NewsroomState) -> dict:
             article_parts.append(paragraph.text)
 
     article_draft = "\n\n".join(article_parts)
+
+    record_current_span(
+        metadata={
+            "evidence_count": str(len(evidence)),
+            "claim_count": str(len(draft.claims)),
+            "paragraph_count": str(len(draft.paragraphs)),
+            "citation_validation_passed": str(not citation_errors).lower(),
+            "citation_error_count": str(len(citation_errors)),
+            "draft_char_count": str(len(article_draft)),
+        }
+    )
 
     return {
         "article_headline": draft.headline,

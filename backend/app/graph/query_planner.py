@@ -6,6 +6,7 @@ from langfuse import observe
 
 from app.graph.llm import query_planner_llm
 from app.schemas.query_plan import NewsQueryPlan
+from app.services.observability import record_current_span
 from app.services.query_normalization import (
     is_historical_query,
     normalize_search_query,
@@ -71,7 +72,12 @@ def _fallback_plan(query: str, current_date: date) -> NewsQueryPlan:
     )
 
 
-@observe(name="query-planner", as_type="span", capture_output=False)
+@observe(
+    name="query-planner",
+    as_type="span",
+    capture_input=False,
+    capture_output=False,
+)
 async def build_news_query_plan(
     query: str,
     *,
@@ -82,7 +88,20 @@ async def build_news_query_plan(
     current_date = today or datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
     if not cleaned_query:
-        return _fallback_plan(query, current_date)
+        plan = _fallback_plan(query, current_date)
+        record_current_span(
+            metadata={
+                "plan_intent": plan.intent,
+                "plan_follow_up_count": str(len(plan.follow_up_queries)),
+                "plan_search_days": (
+                    str(plan.search_days)
+                    if plan.search_days is not None
+                    else "none"
+                ),
+                "plan_fallback_used": "true",
+            }
+        )
+        return plan
 
     messages = [
         SystemMessage(
@@ -110,7 +129,34 @@ async def build_news_query_plan(
             plan.intent = "historical"
             plan.search_days = None
             plan.follow_up_queries = []
+        record_current_span(
+            metadata={
+                "plan_intent": plan.intent,
+                "plan_follow_up_count": str(len(plan.follow_up_queries)),
+                "plan_search_days": (
+                    str(plan.search_days)
+                    if plan.search_days is not None
+                    else "none"
+                ),
+                "plan_fallback_used": "false",
+                "primary_query_length": str(len(plan.primary_query)),
+            }
+        )
         return plan
     except Exception:
         # Planning improves recall but must never break the core search pipeline.
-        return _fallback_plan(cleaned_query, current_date)
+        plan = _fallback_plan(cleaned_query, current_date)
+        record_current_span(
+            metadata={
+                "plan_intent": plan.intent,
+                "plan_follow_up_count": str(len(plan.follow_up_queries)),
+                "plan_search_days": (
+                    str(plan.search_days)
+                    if plan.search_days is not None
+                    else "none"
+                ),
+                "plan_fallback_used": "true",
+                "primary_query_length": str(len(plan.primary_query)),
+            }
+        )
+        return plan

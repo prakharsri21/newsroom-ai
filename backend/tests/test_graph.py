@@ -134,17 +134,13 @@ async def run_graph_with_mocks(
             fake_editor_llm,
         ),
         patch(
-            "app.graph.editor_agent.get_client",
-        ) as mock_get_client,
+            "app.graph.editor_agent.record_current_span",
+        ),
         patch(
             "app.graph.fact_checker.fact_checker_agent_node",
             new=fact_checker_mock,
         ),
     ):
-        mock_get_client.return_value.update_current_span = (
-            lambda **kwargs: None
-        )
-
         result = await newsroom_graph.ainvoke(
             {
                 "query": query,

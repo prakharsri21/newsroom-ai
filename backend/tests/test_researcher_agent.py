@@ -293,3 +293,51 @@ async def test_researcher_does_not_force_second_follow_up_when_evidence_is_suffi
 
     assert result["research_complete"] is True
     assert not getattr(result["messages"][0], "tool_calls", [])
+
+
+@pytest.mark.anyio
+async def test_researcher_records_iteration_metrics():
+    response = SimpleNamespace(
+        tool_calls=[],
+        content="Not enough evidence yet.",
+    )
+    mock_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=response))
+
+    with (
+        patch("app.graph.researcher_agent.researcher_llm", mock_llm),
+        patch("app.graph.researcher_agent.record_current_span") as record_span,
+    ):
+        result = await researcher_agent_node(
+            {
+                "query": "Test query",
+                "query_plan": {
+                    "intent": "current",
+                    "primary_query": "Test query",
+                    "follow_up_queries": [],
+                    "search_days": 7,
+                },
+                "messages": [],
+                "iteration": 0,
+                "research_queries": ["Test query"],
+                "research_evidence": [
+                    {
+                        "url": "https://example.com/article",
+                        "title": "Test article",
+                        "excerpt": "Test evidence.",
+                        "relevance_score": 0.95,
+                        "published_at": "2026-10-14T00:00:00Z",
+                        "authority_tier": "reputable_secondary",
+                        "authority_score": 0.8,
+                        "freshness_score": 1.0,
+                    }
+                ],
+            }
+        )
+
+    metrics = record_span.call_args.kwargs["metadata"]
+    assert result["research_complete"] is True
+    assert metrics["iteration"] == "1"
+    assert metrics["query_plan_intent"] == "current"
+    assert metrics["research_query_count"] == "1"
+    assert metrics["evidence_count"] == "1"
+    assert metrics["research_complete"] == "true"

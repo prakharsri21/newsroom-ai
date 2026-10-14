@@ -134,6 +134,7 @@ newsroom_graph = workflow.compile()
 @observe(
     name="newsroom-graph",
     as_type="span",
+    capture_input=False,
     capture_output=False,
 )
 async def run_newsroom_graph(
