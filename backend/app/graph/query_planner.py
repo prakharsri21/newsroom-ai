@@ -133,7 +133,11 @@ async def build_news_query_plan(
             metadata={
                 "plan_intent": plan.intent,
                 "plan_follow_up_count": str(len(plan.follow_up_queries)),
-                "plan_search_days": str(plan.search_days) if plan.search_days is not None else "none",
+                "plan_search_days": (
+                    str(plan.search_days)
+                    if plan.search_days is not None
+                    else "none"
+                ),
                 "plan_fallback_used": "false",
                 "primary_query_length": str(len(plan.primary_query)),
             }
