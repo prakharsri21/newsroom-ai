@@ -3,11 +3,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langfuse import observe
 
 from app.graph.evidence import collect_research_updates, message_text
 from app.graph.llm import researcher_llm
 from app.graph.research_context import format_research_context
 from app.graph.state import MAX_ITERATIONS, NewsroomState
+from app.services.observability import record_current_span
 from app.services.query_normalization import normalize_search_query
 
 
@@ -106,6 +108,12 @@ def _planned_search_message(
     )
 
 
+@observe(
+    name="researcher-node",
+    as_type="span",
+    capture_input=False,
+    capture_output=False,
+)
 async def researcher_agent_node(state: NewsroomState) -> dict:
     query = state.get("active_research_query") or state["query"]
     query_plan = state.get("query_plan", {}) or {}
@@ -170,11 +178,13 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
         else ""
     )
 
+    planned_search_forced = False
     if (
         next_planned_query
         and iteration < MAX_ITERATIONS
         and planned_key not in model_query_keys
     ):
+        planned_search_forced = True
         response = _planned_search_message(
             next_planned_query,
             iteration=iteration,
@@ -238,4 +248,19 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
             "iterations. Evidence may be incomplete."
         )
 
+    record_current_span(
+        metadata={
+            "iteration": str(iteration),
+            "query_plan_intent": str(query_plan.get("intent", "unknown")),
+            "follow_up_task": str(is_follow_up_task).lower(),
+            "planned_search_forced": str(planned_search_forced).lower(),
+            "tool_call_count": str(len(getattr(response, "tool_calls", []) or [])),
+            "research_query_count": str(len(research_queries)),
+            "evidence_count": str(len(research_evidence)),
+            "research_complete": str(result.get("research_complete", False)).lower(),
+            "research_failed": str(
+                bool(result.get("research_failure_reason"))
+            ).lower(),
+        }
+    )
     return result
