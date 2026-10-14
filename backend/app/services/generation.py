@@ -13,12 +13,12 @@ from app.models.claim_source import ClaimSource
 from app.models.fact_check import FactCheck
 from app.models.news import NewsStory
 from app.models.story_source import StorySource
+from app.graph.query_planner import build_news_query_plan
 from app.schemas.fact_check import ClaimVerification
 from app.schemas.news_generation import (
     NewsGenerationResponse,
     NewsSourceResponse,
 )
-from app.graph.query_planner import build_news_query_plan
 from app.services.observability import record_current_span
 from app.services.research_persistence import persist_research_evidence
 
