@@ -12,7 +12,7 @@ The `generate-news` span records:
 
 - `query_plan_ms`, `graph_ms`, `evidence_persistence_ms`, `article_persistence_ms`, `response_build_ms`, and `total_pipeline_ms` (milliseconds).
 - `query_plan_intent`, `query_plan_fallback`, `planned_follow_up_count`, and `planned_search_days`.
-- `research_complete`, `research_iterations`, `research_query_count`, `evidence_count`, `source_count`, and `claim_count`.
+- `research_complete`, `last_research_loop_iteration`, `research_query_count`, `evidence_count`, `source_count`, and `claim_count`.
 - `status`, `citation_validation_passed`, and `fact_check_passed`. These indicate pipeline outputs, not a guarantee that every claim is true.
 
 On failure, the root span records `pipeline_status=error`, `failure_stage`, `error_type`, any timings completed so far, and total elapsed time.
