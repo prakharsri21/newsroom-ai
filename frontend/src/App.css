@@ -96,6 +96,7 @@ a { color: inherit; }
 .status-badge { display: inline-flex; align-items: center; padding: 5px 8px; border: 1px solid var(--line); border-radius: 20px; color: #b9c7cf; font: 9px var(--mono); text-transform: uppercase; }
 .status-verified { border-color: rgba(123,217,173,.32); color: var(--green); background: rgba(123,217,173,.06); }
 .status-needs_review, .status-research_incomplete, .status-citation_validation_failed { border-color: rgba(229,187,119,.35); color: var(--amber); background: rgba(229,187,119,.05); }
+.status-out_of_scope { border-color: rgba(150,180,200,.32); color: #b5cad7; background: rgba(150,180,200,.05); }
 .generated-panel h2 { margin: 15px 0 9px; color: #f0f5f7; font: 400 clamp(27px, 4vw, 36px)/1.16 var(--serif); letter-spacing: -.025em; }
 .generated-summary { margin: 0 0 17px; color: #bac7d0; font-size: 13px; line-height: 1.8; }
 .article-bullets { display: flex; flex-direction: column; gap: 12px; margin: 18px 0 22px; padding: 0 0 0 19px; color: #d7e0e6; font: 400 15px/1.8 var(--serif); }
