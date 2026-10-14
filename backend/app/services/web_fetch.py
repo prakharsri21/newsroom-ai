@@ -4,8 +4,8 @@ import httpx
 from bs4 import BeautifulSoup
 from langfuse import observe
 
-from app.core.observability import langfuse
 from app.services.firecrawl_fetch import fetch_with_firecrawl
+from app.services.observability import record_current_span
 
 
 MIN_CONTENT_LENGTH = 200
@@ -90,7 +90,7 @@ async def fetch_page(url: str) -> FetchedPage:
         },
     )
 
-    langfuse.update_current_span(
+    record_current_span(
         metadata={
             "status_code": str(response.status_code),
             "extraction_method": page.extraction_method,
@@ -110,15 +110,38 @@ async def fetch_with_fallback(url: str) -> FetchedPage:
     try:
         return await fetch_page(url)
 
-    except (httpx.HTTPError, ValueError):
-        langfuse.update_current_span(
+    except (httpx.HTTPError, ValueError) as fetch_error:
+        record_current_span(
             metadata={
                 "fallback": "firecrawl",
+                "fallback_status": "started",
                 "fallback_reason": "http_fetch_failed_or_content_insufficient",
+                "fallback_trigger_error_type": type(fetch_error).__name__,
             }
         )
 
-        firecrawl_page = await fetch_with_firecrawl(url)
+        try:
+            firecrawl_page = await fetch_with_firecrawl(url)
+        except Exception as fallback_error:
+            # Preserve the original failure behavior: fallback errors still
+            # propagate, while metadata makes the recovery failure visible.
+            record_current_span(
+                metadata={
+                    "fallback_status": "error",
+                    "fallback_error_type": type(fallback_error).__name__,
+                },
+                level="ERROR",
+                status_message="Firecrawl fallback failed",
+            )
+            raise
+
+        record_current_span(
+            metadata={
+                "fallback_status": "success",
+                "fallback_extraction_method": "FIRECRAWL",
+                "fallback_text_length": str(len(firecrawl_page.text)),
+            }
+        )
 
         return FetchedPage(
             url=firecrawl_page.url,
