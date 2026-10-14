@@ -216,6 +216,34 @@ async def generate_news(
         stage_started_at = perf_counter()
         query_plan = await build_news_query_plan(query)
         timings["query_plan_ms"] = _elapsed_ms(stage_started_at)
+
+        # Scope rejection ends the request before LangGraph, search, evidence
+        # persistence, article drafting, or database writes.
+        if not query_plan.is_in_scope:
+            rejection_reason = (
+                query_plan.rejection_reason
+                or "Newsroom AI only researches current or historical news."
+            )
+            record_current_span(
+                metadata={
+                    "pipeline": "news_generation",
+                    "category": category,
+                    "query_length": str(len(query)),
+                    "query_plan_scope": "out_of_scope",
+                    "status": "out_of_scope",
+                    **timings,
+                    "total_pipeline_ms": _elapsed_ms(total_started_at),
+                }
+            )
+            return NewsGenerationResponse(
+                status="out_of_scope",
+                query=query,
+                headline="Newsroom AI is for news research",
+                research_complete=False,
+                research_failure_reason=rejection_reason,
+                message=rejection_reason,
+            )
+
         query_plan_fallback = (
             "deterministic fallback" in query_plan.rationale.lower()
         )
@@ -311,6 +339,7 @@ async def generate_news(
                 "pipeline": "news_generation",
                 "category": category,
                 "query_length": str(len(query)),
+                "query_plan_scope": "in_scope",
                 "query_plan_intent": query_plan.intent,
                 "query_plan_fallback": str(query_plan_fallback).lower(),
                 "planned_follow_up_count": str(len(query_plan.follow_up_queries)),

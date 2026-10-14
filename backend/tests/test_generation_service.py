@@ -15,6 +15,7 @@ from app.services.generation import generate_news
 
 def _fake_query_plan():
     return NewsQueryPlan(
+        is_in_scope=True,
         normalized_topic="Latest RBI monetary policy",
         intent="current",
         primary_query="RBI monetary policy",
@@ -109,6 +110,59 @@ def complete_graph_result(*, passed=True):
         "fact_check_passed": passed,
         "fact_check_reason": review["rationale"],
     }
+
+
+@pytest.mark.anyio
+async def test_out_of_scope_request_stops_before_research_or_persistence():
+    db = FakeSession()
+    rejected_plan = NewsQueryPlan(
+        is_in_scope=False,
+        rejection_reason=(
+            "Newsroom AI researches news only. Try searching for a news "
+            "development or event instead."
+        ),
+        rationale="The request asks for website-development assistance.",
+    )
+
+    with (
+        patch(
+            "app.services.generation.build_news_query_plan",
+            new_callable=AsyncMock,
+            return_value=rejected_plan,
+        ) as planner,
+        patch(
+            "app.services.generation.run_newsroom_graph",
+            new_callable=AsyncMock,
+        ) as graph,
+        patch(
+            "app.services.generation.persist_research_evidence",
+            new_callable=AsyncMock,
+        ) as persist_evidence,
+        patch("app.services.generation.record_current_span") as record_span,
+    ):
+        response = await generate_news(
+            db,
+            query="Can you help me build a website?",
+        )
+
+    planner.assert_awaited_once()
+    graph.assert_not_awaited()
+    persist_evidence.assert_not_awaited()
+    assert response.status == "out_of_scope"
+    assert response.research_complete is False
+    assert response.article is None
+    assert response.story_id is None
+    assert response.article_id is None
+    assert response.sources == []
+    assert response.claims == []
+    assert "news only" in response.message.lower()
+    assert db.items == []
+    assert db.committed is False
+
+    metadata = record_span.call_args.kwargs["metadata"]
+    assert metadata["query_plan_scope"] == "out_of_scope"
+    assert metadata["status"] == "out_of_scope"
+    assert "graph_ms" not in metadata
 
 
 @pytest.mark.anyio

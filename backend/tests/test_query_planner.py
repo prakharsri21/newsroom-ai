@@ -9,6 +9,7 @@ from app.schemas.query_plan import NewsQueryPlan
 
 def _plan(**overrides):
     values = {
+        "is_in_scope": True,
         "normalized_topic": "CJP news",
         "intent": "current",
         "primary_query": "CJP news",
@@ -41,19 +42,61 @@ async def test_query_planner_receives_current_india_date():
 
 
 @pytest.mark.anyio
-async def test_query_planner_falls_back_when_model_fails():
-    with patch("app.graph.query_planner.query_planner_llm") as mock_llm:
+async def test_query_planner_fails_closed_when_model_fails():
+    with (
+        patch("app.graph.query_planner.query_planner_llm") as mock_llm,
+        patch("app.graph.query_planner.record_current_span"),
+    ):
         mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+
+        with pytest.raises(RuntimeError, match="provider unavailable"):
+            await build_news_query_plan(
+                "Latest RBI monetary policy",
+                today=date(2026, 10, 15),
+            )
+
+
+@pytest.mark.anyio
+async def test_query_planner_rejects_website_building_help():
+    rejected_plan = _plan(
+        is_in_scope=False,
+        rejection_reason="Newsroom AI only researches news.",
+    )
+    with patch("app.graph.query_planner.query_planner_llm") as mock_llm:
+        mock_llm.ainvoke = AsyncMock(return_value=rejected_plan)
         result = await build_news_query_plan(
-            "CJP news update today",
+            "Can you help me build a website?",
             today=date(2026, 10, 15),
         )
 
-    assert result.intent == "current"
-    assert result.primary_query == "CJP news"
-    assert result.search_days == 7
-    assert len(result.follow_up_queries) == 2
-    assert "fallback" in result.rationale.lower()
+    assert result.is_in_scope is False
+    assert result.rejection_reason
+    assert result.primary_query == ""
+    assert result.follow_up_queries == []
+    assert result.search_days is None
+
+    messages = mock_llm.ainvoke.await_args.args[0]
+    prompt = messages[0].content
+    assert "Can you help me build a website?" in prompt
+    assert "What are the latest developments in AI website builders?" in prompt
+
+
+@pytest.mark.anyio
+async def test_query_planner_accepts_news_about_ai_website_builders():
+    with patch("app.graph.query_planner.query_planner_llm") as mock_llm:
+        mock_llm.ainvoke = AsyncMock(
+            return_value=_plan(
+                normalized_topic="AI website builders",
+                primary_query="Latest AI website builder developments",
+            )
+        )
+        result = await build_news_query_plan(
+            "What are the latest developments in AI website builders?",
+            today=date(2026, 10, 15),
+        )
+
+    assert result.is_in_scope is True
+    assert result.primary_query == "Latest AI website builder developments"
 
 
 @pytest.mark.anyio

@@ -3,7 +3,7 @@ import { AlertCircle, ArrowUpRight, CheckCircle2, ExternalLink, Globe2, LoaderCi
 import "./App.css";
 
 type Verdict = "SUPPORTED" | "PARTIALLY_SUPPORTED" | "CONTRADICTED" | "UNVERIFIABLE" | "OUTDATED";
-type GenerationStatus = "verified" | "needs_review" | "research_incomplete" | "citation_validation_failed";
+type GenerationStatus = "verified" | "needs_review" | "research_incomplete" | "citation_validation_failed" | "out_of_scope";
 
 type GenerationResult = {
   status: GenerationStatus;
@@ -84,6 +84,7 @@ const STATUS_LABELS: Record<GenerationStatus, string> = {
   needs_review: "Needs review",
   research_incomplete: "Research incomplete",
   citation_validation_failed: "Citation validation failed",
+  out_of_scope: "Out of scope",
 };
 
 const VERDICT_LABELS: Record<Verdict, string> = {
@@ -292,10 +293,15 @@ function App() {
         {generated && (
           <section className="generated-panel" aria-live="polite">
             <div className="generated-topline">
-              <p className="eyebrow">YOUR NEWSROOM REPORT</p>
+              <p className="eyebrow">{generated.status === "out_of_scope" ? "NEWSROOM AI SCOPE" : "YOUR NEWSROOM REPORT"}</p>
               <span className={`status-badge status-${generated.status}`}>{STATUS_LABELS[generated.status] || generated.status}</span>
             </div>
-            <h2>{generated.headline || generated.query}</h2>
+            <h2>{generated.status === "out_of_scope" ? "Newsroom AI is for news research" : generated.headline || generated.query}</h2>
+            {generated.status === "out_of_scope" ? (
+              <p className="generated-summary">{generated.message}</p>
+            ) : (
+              <>
+
             {generated.summary && <p className="generated-summary">{generated.summary}</p>}
             {generated.research_failure_reason && <p className="inline-warning">Research note: {generated.research_failure_reason}</p>}
             {generated.citation_validation_errors?.length > 0 && (
@@ -329,7 +335,10 @@ function App() {
                 <div className="source-text"><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url} <ExternalLink size={12} /></a><span>{source.publisher || source.authority_tier || "Publisher unavailable"}{source.published_at ? ` · ${formatDate(source.published_at)}` : ""}</span></div>
               </li>)}</ol> : <p className="empty-note">The API did not return source links for this report.</p>}
             </div>
-            <p className="report-note">{generated.message}</p>
+            
+                <p className="report-note">{generated.message}</p>
+              </>
+            )}
           </section>
         )}
 
