@@ -171,7 +171,7 @@ function App() {
   const searchInput = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
 
-  const loadTopNews = useCallback(async (forceRefresh = true) => {
+  const loadTopNews = useCallback(async (forceRefresh = false) => {
     setNewsLoading(true);
     setNewsError("");
     try {
@@ -202,8 +202,8 @@ function App() {
   useEffect(() => {
     if (initialLoadDone.current) return;
     initialLoadDone.current = true;
-    // Refresh on each page load so the homepage asks the backend for current news.
-    void loadTopNews(true);
+    // Prefer the backend's 30-minute cache on page load; manual refresh bypasses it.
+    void loadTopNews(false);
   }, [loadTopNews]);
 
   const visibleStories = useMemo(() => {
