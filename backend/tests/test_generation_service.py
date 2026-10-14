@@ -135,6 +135,7 @@ async def test_generate_news_persists_verified_article():
                 ],
             ),
         ),
+        patch("app.services.generation.record_current_span") as record_span,
     ):
         response = await generate_news(
             db,
@@ -156,6 +157,14 @@ async def test_generate_news_persists_verified_article():
     assert any(isinstance(item, FactCheck) for item in db.items)
     assert any(isinstance(item, ClaimSource) for item in db.items)
     assert any(isinstance(item, StorySource) for item in db.items)
+
+    metrics = record_span.call_args.kwargs["metadata"]
+    assert metrics["pipeline"] == "news_generation"
+    assert metrics["status"] == "verified"
+    assert metrics["research_complete"] == "true"
+    assert metrics["evidence_count"] == "1"
+    assert float(metrics["total_pipeline_ms"]) >= 0
+    assert "graph_ms" in metrics
 
 
 @pytest.mark.anyio
