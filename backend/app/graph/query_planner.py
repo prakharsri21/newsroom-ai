@@ -7,10 +7,7 @@ from langfuse import observe
 from app.graph.llm import query_planner_llm
 from app.schemas.query_plan import NewsQueryPlan
 from app.services.observability import record_current_span
-from app.services.query_normalization import (
-    is_historical_query,
-    normalize_search_query,
-)
+from app.services.query_normalization import is_historical_query
 
 
 QUERY_PLANNER_SYSTEM_PROMPT = """
