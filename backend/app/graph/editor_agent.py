@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.services.observability import record_current_span
 
 from app.graph.citation import (
     build_evidence_registry,
@@ -10,6 +9,7 @@ from app.graph.citation import (
 from app.graph.llm import editor_llm
 from app.graph.research_context import build_editor_context
 from app.graph.state import NewsroomState
+from app.services.observability import record_current_span
 
 
 EDITOR_SYSTEM_PROMPT = """
