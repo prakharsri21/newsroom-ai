@@ -3,7 +3,9 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-MAX_ITERATIONS = 3
+# Four Researcher calls allow one primary search, up to two planned
+# follow-ups, and one final synthesis/completion decision.
+MAX_ITERATIONS = 4
 
 
 class ResearchEvidence(TypedDict, total=False):
@@ -25,6 +27,7 @@ class ResearchEvidence(TypedDict, total=False):
 class NewsroomState(TypedDict, total=False):
     # Original user request
     query: str
+    query_plan: dict[str, object]
 
     # Research inputs / outputs
     research_queries: list[str]

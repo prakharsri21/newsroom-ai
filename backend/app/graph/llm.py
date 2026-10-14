@@ -2,11 +2,21 @@ from langchain_openai import ChatOpenAI
 
 from app.core.config import get_settings
 from app.graph.tools.research_tools import search_news
-from app.schemas.research import ResearchDecision
 from app.schemas.editor import ArticleDraft
 from app.schemas.fact_check import FactCheckReport
+from app.schemas.query_plan import NewsQueryPlan
+from app.schemas.research import ResearchDecision
 
 settings = get_settings()
+
+
+query_planner_llm = ChatOpenAI(
+    model=settings.openai_model,
+    api_key=settings.openai_api_key,
+    use_responses_api=True,
+    output_version="responses/v1",
+    reasoning={"effort": "low"},
+).with_structured_output(NewsQueryPlan)
 
 
 researcher_llm = ChatOpenAI(
@@ -14,9 +24,7 @@ researcher_llm = ChatOpenAI(
     api_key=settings.openai_api_key,
     use_responses_api=True,
     output_version="responses/v1",
-    reasoning={
-        "effort": "low",
-    },
+    reasoning={"effort": "low"},
 ).bind_tools([search_news])
 
 
@@ -25,10 +33,9 @@ researcher_decision_llm = ChatOpenAI(
     api_key=settings.openai_api_key,
     use_responses_api=True,
     output_version="responses/v1",
-    reasoning={
-        "effort": "low",
-    },
+    reasoning={"effort": "low"},
 ).with_structured_output(ResearchDecision)
+
 
 editor_llm = ChatOpenAI(
     model=settings.openai_model,
@@ -37,6 +44,7 @@ editor_llm = ChatOpenAI(
     output_version="responses/v1",
     reasoning={"effort": "low"},
 ).with_structured_output(ArticleDraft)
+
 
 fact_checker_llm = ChatOpenAI(
     model=settings.openai_model,
