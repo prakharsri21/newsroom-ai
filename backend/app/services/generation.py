@@ -322,7 +322,7 @@ async def generate_news(
                 "research_complete": _metric_bool(
                     result.get("research_complete")
                 ),
-                "research_iterations": str(result.get("iteration", 0)),
+                "last_research_loop_iteration": str(result.get("iteration", 0)),
                 "research_query_count": str(len(result.get("research_queries", []))),
                 "evidence_count": str(len(evidence)),
                 "claim_count": str(len(claims)),
