@@ -114,3 +114,26 @@ async def test_historical_query_skips_date_filter():
         max_results=3,
         days=None,
     )
+
+
+
+@pytest.mark.anyio
+async def test_historical_plan_flag_skips_date_filter_even_for_rewritten_query():
+    with patch(
+        "app.graph.tools.research_tools.search_web",
+        new_callable=AsyncMock,
+        return_value=_response(query="CJP election 2022"),
+    ) as mock_search:
+        await search_news.ainvoke(
+            {
+                "query": "CJP election 2022",
+                "max_results": 3,
+                "historical": True,
+            }
+        )
+
+    mock_search.assert_awaited_once_with(
+        "CJP election 2022",
+        max_results=3,
+        days=None,
+    )

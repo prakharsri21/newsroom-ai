@@ -221,3 +221,31 @@ async def test_researcher_does_not_force_original_plan_during_follow_up_task():
         )
 
     assert not getattr(result["messages"][0], "tool_calls", [])
+
+
+
+@pytest.mark.anyio
+async def test_researcher_forces_historical_primary_without_date_filter():
+    response = SimpleNamespace(tool_calls=[], content="Historical evidence found.")
+    mock_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=response))
+
+    with patch("app.graph.researcher_agent.researcher_llm", mock_llm):
+        result = await researcher_agent_node(
+            {
+                "query": "History of CJP protests",
+                "query_plan": {
+                    "intent": "historical",
+                    "primary_query": "CJP protests timeline",
+                    "follow_up_queries": [],
+                    "search_days": None,
+                },
+                "messages": [],
+                "iteration": 0,
+                "research_queries": [],
+                "research_evidence": [],
+            }
+        )
+
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["args"]["query"] == "CJP protests timeline"
+    assert tool_call["args"]["historical"] is True

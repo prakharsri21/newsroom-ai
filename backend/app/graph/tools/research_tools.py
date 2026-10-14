@@ -18,6 +18,7 @@ async def search_news(
     query: str,
     max_results: int = 3,
     days: int | None = None,
+    historical: bool = False,
 ) -> str:
     """
     Search for news using a concise topic-focused query.
@@ -30,11 +31,12 @@ async def search_news(
     requested_query = " ".join(query.split())
     normalized_query = normalize_search_query(requested_query) or requested_query
 
-    effective_days = (
-        max(1, min(days, 30))
-        if days is not None
-        else default_search_days(requested_query)
-    )
+    if historical:
+        effective_days = None
+    elif days is not None:
+        effective_days = max(1, min(days, 30))
+    else:
+        effective_days = default_search_days(requested_query)
 
     response = await search_web(
         normalized_query,
@@ -86,6 +88,7 @@ async def search_news(
                 "search_days": effective_days,
                 "fallback_used": fallback_used,
                 "fallback_days": fallback_days,
+                "historical": historical or effective_days is None,
             },
         }
     )

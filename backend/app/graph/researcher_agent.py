@@ -44,11 +44,13 @@ def _next_unsearched_planned_query(
     researched_queries: list[str],
 ) -> str | None:
     """Return the first planned search not yet represented in research history."""
-    if query_plan.get("intent") != "current":
+    intent = query_plan.get("intent")
+    if intent not in {"current", "historical"}:
         return None
 
     planned = [query_plan.get("primary_query")]
-    planned.extend(query_plan.get("follow_up_queries") or [])
+    if intent == "current":
+        planned.extend(query_plan.get("follow_up_queries") or [])
     researched = {
         normalize_search_query(query).casefold()
         for query in researched_queries
@@ -82,9 +84,12 @@ def _planned_search_message(
     query_plan: dict[str, object],
 ) -> AIMessage:
     args: dict[str, object] = {"query": query, "max_results": 3}
-    search_days = query_plan.get("search_days")
-    if isinstance(search_days, int):
-        args["days"] = search_days
+    if query_plan.get("intent") == "historical":
+        args["historical"] = True
+    else:
+        search_days = query_plan.get("search_days")
+        if isinstance(search_days, int):
+            args["days"] = search_days
 
     return AIMessage(
         content="Executing the next planned search before completing current-news research.",
@@ -173,6 +178,27 @@ async def researcher_agent_node(state: NewsroomState) -> dict:
             iteration=iteration,
             query_plan=query_plan,
         )
+
+    # If the model requests any further historical searches, mark them
+    # explicitly so the search tool does not reapply the current-news filter.
+    if query_plan.get("intent") == "historical":
+        raw_calls = getattr(response, "tool_calls", []) or []
+        if raw_calls:
+            normalized_calls = []
+            for item in raw_calls:
+                args = dict(item.get("args") or {})
+                if item.get("name") == "search_news":
+                    args["historical"] = True
+                normalized_calls.append({
+                    "name": item.get("name"),
+                    "args": args,
+                    "id": item.get("id", "historical-search"),
+                    "type": "tool_call",
+                })
+            response = AIMessage(
+                content=message_text(response),
+                tool_calls=normalized_calls,
+            )
 
     all_messages = [*messages, response]
     research_queries, research_evidence = collect_research_updates(
