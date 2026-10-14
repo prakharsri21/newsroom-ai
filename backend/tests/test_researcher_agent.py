@@ -187,15 +187,19 @@ async def test_researcher_uses_follow_up_query_after_primary_was_searched():
 
 
 @pytest.mark.anyio
-async def test_researcher_does_not_force_original_plan_during_follow_up_task():
-    response = SimpleNamespace(tool_calls=[], content="Follow-up evidence found.")
+async def test_researcher_forces_targeted_search_during_follow_up_task():
+    response = SimpleNamespace(
+        tool_calls=[],
+        content="Follow-up evidence found.",
+    )
     mock_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=response))
 
+    active_query = "Find the police response to CJP's request"
     with patch("app.graph.researcher_agent.researcher_llm", mock_llm):
         result = await researcher_agent_node(
             {
                 "query": "CJP news update today",
-                "active_research_query": "Find the police response to CJP's request",
+                "active_research_query": active_query,
                 "query_plan": {
                     "intent": "current",
                     "primary_query": "CJP news",
@@ -220,7 +224,63 @@ async def test_researcher_does_not_force_original_plan_during_follow_up_task():
             }
         )
 
-    assert not getattr(result["messages"][0], "tool_calls", [])
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "search_news"
+    assert tool_call["args"]["query"] == active_query
+    assert tool_call["args"]["days"] == 7
+
+
+@pytest.mark.anyio
+async def test_researcher_replaces_broad_search_with_targeted_follow_up():
+    response = SimpleNamespace(
+        tool_calls=[
+            {
+                "name": "search_news",
+                "args": {"query": "CJP news", "max_results": 3},
+                "id": "broad-search",
+                "type": "tool_call",
+            }
+        ],
+        content="Searching for more CJP news.",
+    )
+    mock_llm = SimpleNamespace(ainvoke=AsyncMock(return_value=response))
+    active_query = "Find the police response to CJP's request"
+
+    with (
+        patch("app.graph.researcher_agent.researcher_llm", mock_llm),
+        patch("app.graph.researcher_agent.record_current_span") as record_span,
+    ):
+        result = await researcher_agent_node(
+            {
+                "query": "CJP news update today",
+                "active_research_query": active_query,
+                "query_plan": {
+                    "intent": "current",
+                    "primary_query": "CJP news",
+                    "follow_up_queries": ["CJP recent developments"],
+                    "search_days": 7,
+                },
+                "messages": [],
+                "iteration": 0,
+                "research_queries": ["CJP news"],
+                "research_evidence": [
+                    {
+                        "url": "https://example.com/cjp",
+                        "title": "CJP report",
+                        "excerpt": "The party made a request.",
+                        "relevance_score": 0.95,
+                        "published_at": "2026-10-14T00:00:00Z",
+                        "authority_tier": "reputable_secondary",
+                        "authority_score": 0.8,
+                        "freshness_score": 1.0,
+                    }
+                ],
+            }
+        )
+
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["args"]["query"] == active_query
+    assert record_span.call_args.kwargs["metadata"]["follow_up_search_forced"] == "true"
 
 
 
