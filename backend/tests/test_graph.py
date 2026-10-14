@@ -135,7 +135,7 @@ async def run_graph_with_mocks(
         ),
         patch(
             "app.graph.editor_agent.record_current_span",
-        ) as mock_record_current_span,
+        ),
         patch(
             "app.graph.fact_checker.fact_checker_agent_node",
             new=fact_checker_mock,
