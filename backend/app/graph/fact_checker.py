@@ -1,10 +1,8 @@
-
 from langfuse import observe
-
-from app.services.observability import record_current_span
 
 from app.graph.fact_checker_agent import fact_checker_agent_node
 from app.graph.state import NewsroomState
+from app.services.observability import record_current_span
 
 
 @observe(
