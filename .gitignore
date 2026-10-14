@@ -1,7 +1,19 @@
+
+# Environment variables and local secrets
 .env
+.env.*
+!.env.example
+
+# Python
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+
+# Node / frontend
+node_modules/
+dist/
+
+# OS
 .DS_Store
