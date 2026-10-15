@@ -1,86 +1,118 @@
 # Newsroom AI
 
-Newsroom AI is an agentic news-research and writing application. It discovers reporting for a topic, gathers source evidence, drafts an article with citations, validates those citations, and checks individual claims before presenting the result.
+Newsroom AI is an agentic AI application that researches current or historical news, writes a cited article, and checks its claims against collected evidence. It also provides a categorized top-news feed.
 
-> **Editorial note:** A `verified` status means the application's research, citation, and fact-check checks passed. It is not a guarantee of truth. Review the cited sources before publishing.
+> **Note:** A `verified` result means the application's citation checks and fact-checking workflow passed. It is not a guarantee of truth. Review the linked sources before relying on or publishing a story.
 
-## What it does
+## Features
 
-- **News feed:** Browse recent headlines by category. The initial feed uses a 30-minute backend cache; the refresh action requests fresh discovery.
-- **Query planning:** Turns a user topic into a focused search plan and supports current or explicitly historical research.
-- **Agentic research:** A LangGraph workflow coordinates the Researcher, Editor, and Fact Checker.
-- **Evidence and citations:** Stores source records and evidence relationships; checks article citations against the collected evidence.
-- **Claim verification:** Returns per-claim verdicts, rationales, and supporting or contradicting evidence references.
-- **Source extraction fallback:** Tries direct HTTP/BeautifulSoup extraction and falls back to Firecrawl when direct extraction fails or yields too little text.
-- **Observability:** Langfuse traces the generation pipeline and records stage timings and low-cardinality diagnostic metadata.
+- Browse recent headlines by category, with cached top-news discovery.
+- Turn a topic into a focused news search plan, including current and historical queries.
+- Research stories using web search and source extraction.
+- Draft articles with evidence-linked citations.
+- Validate citations and fact-check claims individually.
+- Store stories, articles, sources, claims, and fact-check results in PostgreSQL.
+- Trace pipeline stages, outcomes, and timings with Langfuse.
+- Reject non-news requests before research begins.
 
-## Stack
+## Tech stack
 
-**Backend:** Python 3.12+, FastAPI, LangGraph, LangChain/OpenAI, SQLAlchemy async, Alembic, PostgreSQL, Tavily, Firecrawl, Langfuse  
-**Frontend:** React, TypeScript, Vite  
-**Local database:** PostgreSQL 17 via Docker Compose
+- **Backend:** Python 3.12+, FastAPI, LangGraph, LangChain, OpenAI
+- **Frontend:** React, TypeScript, Vite
+- **Database:** PostgreSQL 17, SQLAlchemy async, Alembic
+- **Search and extraction:** Tavily, HTTP/BeautifulSoup, Firecrawl fallback
+- **Observability:** Langfuse
+- **Local development:** Docker Compose, `uv`, npm
 
-## Architecture
+## Agentic workflow
 
-```text
-React + Vite
-    |
-    v
-FastAPI
-    |
-    +--> Cached top-news feed
-    |
-    +--> Query planner
-             |
-             v
-         LangGraph
-       Researcher -> Editor -> Fact Checker
-             |          |
-             v          v
-        Tavily search  Citation validation
-             |
-             v
-       HTTP/BeautifulSoup -> Firecrawl fallback
-             |
-             v
-        PostgreSQL: sources, stories, articles,
-        claims, fact checks, and relationships
-
-Langfuse traces generation stages and fetch/research outcomes.
+```mermaid
+flowchart TD
+    A[User enters a topic] --> B[Query Planner and Scope Gate]
+    B -->|Out of scope| X[Return a polite rejection]
+    B -->|In scope| C[Researcher Agent]
+    C --> D{More evidence needed?}
+    D -->|Yes| E[Search web and extract sources]
+    E --> C
+    D -->|No or iteration limit| F{Research complete?}
+    F -->|No| U[Return incomplete result for review]
+    F -->|Yes| G[Editor Agent drafts article and claims]
+    G --> H[Validate citation references]
+    H -->|Failed| R[Stop with needs-review status]
+    H -->|Passed| I[Fact-Checker Agent verifies each claim]
+    I --> J{All claims supported?}
+    J -->|Yes| K[Finalize verified result]
+    J -->|No| L{Retry limit reached?}
+    L -->|No: more evidence needed| C
+    L -->|No: revise the draft| G
+    L -->|Yes| R
+    K --> M[Persist article, sources, claims, and verdicts]
+    R --> M
 ```
 
-## Local setup
+The scope gate runs before the research graph. An out-of-scope query or a query-planning failure must not continue into web research or article generation.
 
-### Prerequisites
+## What makes it agentic?
 
-- Python 3.12 or later
-- [uv](https://docs.astral.sh/uv/)
-- Node.js and npm (Node 22+ recommended)
-- Docker Desktop or Docker Engine
-- API credentials for OpenAI, Tavily, Firecrawl, and Langfuse
+Newsroom AI is more than a single prompt that generates an article:
 
-### 1. Configure environment variables
+- **Role-based agents:** The Researcher gathers evidence, the Editor writes from that evidence, and the Fact Checker independently reviews the article's claims.
+- **Tool use:** The Researcher can call search tools and examine the results before continuing.
+- **Conditional routing:** The LangGraph workflow uses the state of the run to decide whether to draft, verify, revise, research further, or stop.
+- **Feedback loops:** Unsupported or unverifiable claims can trigger another research pass or a revised draft, within bounded retry limits.
+- **Structured state and memory within a run:** Research evidence, queries, citations, and claim verdicts are carried through the workflow rather than handled as isolated prompts.
+- **Scope control:** The Query Planner classifies intent before building the news search plan and fails closed if that check fails.
 
-At the repository root:
+## Problems faced and how they were addressed
+
+### 1. Non-news requests reached the news pipeline
+
+A request such as *“Can you help me build a website?”* could be interpreted as a search topic instead of a request for general assistance.
+
+**Solution:** Added a scope decision (`is_in_scope`) to the Query Planner, explicit in-scope and out-of-scope rules, early rejection before research or persistence, fail-closed handling for planner failures, and regression tests. News queries about the same topic—such as developments in AI website builders—remain eligible.
+
+### 2. Citations could be present without proving a claim
+
+A source mentioning the same topic does not necessarily support a specific statement.
+
+**Solution:** The Editor supplies evidence references for article sections and structured claims. Citation references are validated against collected evidence, and the Fact Checker assesses each claim independently, recording verdicts and supporting or contradicting evidence. Failed checks can trigger a bounded revision or research loop.
+
+### 3. Some publisher pages reject direct extraction
+
+A direct request can return an access error or too little readable text.
+
+**Solution:** The app supports a Firecrawl fallback when appropriate and configured. Publisher access restrictions should be respected; the system should not try to bypass them.
+
+### 4. Multi-step workflows are difficult to debug and tune
+
+Slow searches, repeated research passes, and database persistence can all contribute to end-to-end latency.
+
+**Solution:** Langfuse records stage-level traces and timing metadata to make the bottleneck visible. Research iterations and fact-check retries are bounded. Performance can then be improved based on measured traces rather than guesswork.
+
+## Run locally
+
+### Requirements
+
+Python 3.12+, [`uv`](https://docs.astral.sh/uv/), Node.js/npm, Docker, and API credentials for OpenAI, Tavily, and Firecrawl. Langfuse credentials are used for tracing.
+
+### 1. Configure environment
+
+From the repository root:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and replace the placeholder credentials. Keep `.env` private; it is git-ignored. The included Docker Compose PostgreSQL credentials are for local development only.
+Add your credentials to `.env`. Do not commit this file or expose API keys in frontend code.
 
-### 2. Start PostgreSQL and install Python dependencies
-
-From the repository root:
+### 2. Start the database and install dependencies
 
 ```bash
 docker compose up -d postgres
 uv sync --dev
 ```
 
-### 3. Apply migrations and start the API
-
-In a terminal:
+### 3. Apply migrations and start the backend
 
 ```bash
 cd backend
@@ -88,7 +120,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Check the health endpoint at [http://localhost:8000/health](http://localhost:8000/health). Interactive API documentation is at [http://localhost:8000/docs](http://localhost:8000/docs).
+API docs: <http://localhost:8000/docs>
 
 ### 4. Start the frontend
 
@@ -100,51 +132,16 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The frontend defaults to `http://localhost:8000` for the API. To override it, create `frontend/.env.local` with:
+Open <http://localhost:5173>.
 
-```dotenv
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## API quick reference
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | Service health |
-| `GET` | `/news/top?limit=10` | Get the cached/discovered news feed |
-| `GET` | `/news/top?limit=10&refresh=true` | Force fresh top-news discovery |
-| `POST` | `/news/generate` | Research, draft, cite, and fact-check a requested topic |
-| `POST` | `/news/stories` | Create a basic story record |
-| `GET` | `/news/stories/{story_id}` | Retrieve a story record |
-
-Example generation request:
-
-```bash
-curl -X POST http://localhost:8000/news/generate \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"Latest official updates on a current sports topic","category":"Sports"}'
-```
-
-Inspect the returned `status`, `citation_validation_passed`, `fact_check_passed`, `sources`, and `claims`. Results that need review or have incomplete research should not be treated as verified reporting.
-
-## Validation
-
-Start PostgreSQL, configure `.env`, and apply migrations before running the backend tests.
-
-Backend tests:
+### Tests
 
 ```bash
 cd backend
 uv run pytest -q
 ```
 
-Targeted lint for the recently updated research and fetch paths:
-
-```bash
-uv run ruff check app/graph/researcher_agent.py app/services/web_fetch.py tests/test_researcher_agent.py tests/test_web_fetch.py
-```
-
-Frontend production build:
+Build the frontend:
 
 ```bash
 cd frontend
@@ -152,10 +149,10 @@ npm ci
 npm run build
 ```
 
-Langfuse tracing fields and guidance are documented in [docs/observability.md](docs/observability.md).
+## Limitations
 
-## Project boundaries
+News quality depends on the available sources, provider availability, and model output. Automated checks help identify citation and claim problems, but they do not replace editorial review. The Docker Compose database settings are for local development, not production deployment.
 
-- News retrieval and model output depend on external providers, their availability, and API limits.
-- A passed check is a useful quality signal, not a replacement for editorial review.
-- The Docker Compose database configuration is intended for local development, not production deployment.
+## Repository
+
+[GitHub: prakharsri21/newsroom-ai](https://github.com/prakharsri21/newsroom-ai)
