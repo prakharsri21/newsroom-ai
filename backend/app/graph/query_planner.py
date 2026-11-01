@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -73,6 +74,16 @@ If the request is IN SCOPE:
 """
 
 
+# Block only explicit requests to build a website, not news about builders.
+_DIRECT_WEBSITE_HELP = re.compile(
+    r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:help\s+me\s+)?(?:build|create|make|develop|code|design)\s+"
+    r"(?:me\s+)?(?:a|an|my)\s+(?:new\s+)?"
+    r"(?:website|web\s*site|web\s*app|webpage)\b",
+    re.IGNORECASE,
+)
+
+
 def _out_of_scope_plan(reason: str) -> NewsQueryPlan:
     return NewsQueryPlan(
         is_in_scope=False,
@@ -106,6 +117,19 @@ async def build_news_query_plan(
                 "plan_intent": plan.intent,
                 "plan_follow_up_count": "0",
                 "plan_search_days": "none",
+            }
+        )
+        return plan
+
+    if _DIRECT_WEBSITE_HELP.match(cleaned_query):
+        plan = _out_of_scope_plan(
+            "Newsroom AI researches news; it cannot build websites or applications."
+        )
+        record_current_span(
+            metadata={
+                "plan_scope": "out_of_scope",
+                "scope_gate": "direct_website_assistance",
+                "plan_follow_up_count": "0",
             }
         )
         return plan
