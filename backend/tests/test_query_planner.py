@@ -111,3 +111,41 @@ async def test_explicit_historical_query_disables_date_window():
     assert result.intent == "historical"
     assert result.search_days is None
     assert result.follow_up_queries == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Can you help me build a website?",
+        "Could you create a website for me?",
+        "Will you design my webpage?",
+        "Can you build a web app?",
+    ],
+)
+async def test_direct_website_help_is_rejected_without_llm(query):
+    with patch("app.graph.query_planner.query_planner_llm") as mock_llm:
+        result = await build_news_query_plan(query, today=date(2026, 11, 1))
+
+    assert result.is_in_scope is False
+    assert result.primary_query == ""
+    assert result.follow_up_queries == []
+    mock_llm.ainvoke.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_news_about_website_builders_still_reaches_llm():
+    with patch("app.graph.query_planner.query_planner_llm") as mock_llm:
+        mock_llm.ainvoke = AsyncMock(
+            return_value=_plan(
+                normalized_topic="AI website builders",
+                primary_query="Latest AI website builder news",
+            )
+        )
+        result = await build_news_query_plan(
+            "What are the latest developments in AI website builders?",
+            today=date(2026, 11, 1),
+        )
+
+    assert result.is_in_scope is True
+    mock_llm.ainvoke.assert_awaited_once()
